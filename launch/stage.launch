@@ -14,8 +14,8 @@
 
     <!--We are using AMCL for the assignment-->
     <!-- Run AMCL Localisation node-->
-    <node name="amcl" pkg="amcl" type="amcl" args="scan:=base_scan"/>
-
+    <!--node name="amcl" pkg="amcl" type="amcl" args="scan:=base_scan"/-->
+  
     <!-- Run rviz for visualisation-->
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(find pf_localisation)/config/demo.rviz"/>
 

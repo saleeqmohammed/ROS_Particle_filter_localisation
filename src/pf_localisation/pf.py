@@ -1,13 +1,12 @@
 from geometry_msgs.msg import Pose, PoseArray, Quaternion
-from . pf_base import PFLocaliserBase
+from  pf_base import PFLocaliserBase
 import math
 import rospy
 
 from . util import rotateQuaternion, getHeading
-from random import random
+from random import random, vonmisesvariate,gauss,randrange
 
 from time import time
-
 
 class PFLocaliser(PFLocaliserBase):
        
@@ -18,8 +17,10 @@ class PFLocaliser(PFLocaliserBase):
         # ----- Set motion model parameters
  
         # ----- Sensor model parameters
+        self.INITIALPOSE = (0,0,0)
+        self.PARTICLECOUNT =100
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
-        
+        self.particlecloud = self.initialise_particle_cloud(0)
        
     def initialise_particle_cloud(self, initialpose):
         """
@@ -35,7 +36,22 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.PoseArray) poses of the particles
         """
-        pass
+        print(initialpose)
+        startingPoses =PoseArray
+        #create random uniform probability positoins
+        initialPositions =[(randrange(-15,15),randrange(-15,15)) for x in range(self.PARTICLECOUNT)]
+        #create random probability angles
+        initialAngles = [math.cos(vonmisesvariate(0,0)/2)*0.5  for x in range(self.PARTICLECOUNT)]
+        for i in range(self.PARTICLECOUNT):
+            currPose = Pose
+            currPose.position.x=initialPositions[i][0]
+            currPose.position.y = initialPositions[i][1]
+            currPose.orientation.x=0
+            currPose.orientation.y=0
+            currPose.orientation.z=1
+            currPose.orientation.w=initialAngles[i]
+            startingPoses.poses.append(currPose)
+        return PoseArray
 
  
     
@@ -49,7 +65,6 @@ class PFLocaliser(PFLocaliserBase):
 
          """
         pass
-
     def estimate_pose(self):
         """
         This should calculate and return an updated robot pose estimate based
@@ -67,3 +82,4 @@ class PFLocaliser(PFLocaliserBase):
             | (geometry_msgs.msg.Pose) robot's estimated pose.
          """
         pass
+    
