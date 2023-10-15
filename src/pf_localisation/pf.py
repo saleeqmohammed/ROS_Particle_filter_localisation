@@ -23,9 +23,6 @@ class PFLocaliser(PFLocaliserBase):
         self.MAP_HEIGHT =602*0.050
         self.MAP_WIDTH =602*0.050
 
-    def distanceToParticle(self,origin: Pose, target: Pose):
-        dist = math.sqrt((origin.position.x-target.postion.x)**2 + (origin.position.y-target.position.y)**2)
-        return dist
     def initialise_particle_cloud(self, initialpose:Pose):
         """
         Set particle cloud to initialpose plus noise
@@ -97,4 +94,3 @@ class PFLocaliser(PFLocaliserBase):
 
         
 
-    
