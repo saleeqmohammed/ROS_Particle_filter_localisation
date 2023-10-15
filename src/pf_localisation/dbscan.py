@@ -44,7 +44,7 @@ def dbscan(data, epsilon, min_samples):
 
     return labels
 
-def priminent_cluster(epsilon,min_samples,data)
+def priminent_cluster(epsilon,min_samples,data):
 
     #cluster data
     cluster_labels = dbscan(data, epsilon, min_samples)
