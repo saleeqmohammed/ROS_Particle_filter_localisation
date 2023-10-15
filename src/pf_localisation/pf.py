@@ -4,29 +4,28 @@ import math
 import rospy
 from . util import rotateQuaternion, getHeading
 from random import random, vonmisesvariate,gauss,randrange
-
+import numpy as np  
 from time import time
-
+from statistics import mean,stdev
 class PFLocaliser(PFLocaliserBase):
        
     def __init__(self):
         # ----- Call the superclass constructor
         super(PFLocaliser, self).__init__()
-        
         # ----- Set motion model parameters
  
         # ----- Sensor model parameters
         self.PARTICLECOUNT =100
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
-        self.particlecloud = self.initialise_particle_cloud(0)
-        #--visualisation parameters
-        self.MAP_RESOULUTION = self.occupancy_map.info.resolution
-        self.MAP_HEIGHT =self.occupancy_map.info.height
-        self.MAP_WIDTH = self.occupancy_map.info.width
-    
-    def delta_trans(last_pose:Pose, curr_pose: Pose):
+        #self.particlecloud = self.initialise_particle_cloud(0)
+        #--visualisation parameters setting these manually atm since /map_metadata is not subscribed yet
+        self.MAP_RESOULUTION = 0.050
+        self.MAP_HEIGHT =602*0.050
+        self.MAP_WIDTH =602*0.050
 
-      pass 
+    def distanceToParticle(self,origin: Pose, target: Pose):
+        dist = math.sqrt((origin.position.x-target.postion.x)**2 + (origin.position.y-target.position.y)**2)
+        return dist
     def initialise_particle_cloud(self, initialpose:Pose):
         """
         Set particle cloud to initialpose plus noise
@@ -41,15 +40,12 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.PoseArray) poses of the particles
         """
-        print("Unique marker")
-        print(initialpose)
-        print("Unique marker")
         startingPoses = PoseArray()
-        #create random uniform probability positoins
-        initialPositions_x =[gauss(initialpose.position.x/self.MAP_RESOULUTION,self.MAP_WIDTH/8) for _ in range(self.PARTICLECOUNT)]
-        initialPositions_y =[gauss(initialpose.position.y/self.MAP_RESOULUTION,self.MAP_HEIGHT/8) for _ in range(self.PARTICLECOUNT)]
-        #create random probability angles
-        initialAngles = [math.cos(vonmisesvariate(0,0)/2)*0.5  for x in range(self.PARTICLECOUNT)]
+        #create x and y coordinates of possible posses in a normal distribution around inital position
+        initialPositions_x =[gauss(initialpose.pose.pose.position.x,self.MAP_WIDTH/8) for _ in range(self.PARTICLECOUNT)]
+        initialPositions_y =[gauss(initialpose.pose.pose.position.y,self.MAP_HEIGHT/8) for _ in range(self.PARTICLECOUNT)]
+        #create random uniform probability angles
+        initialAngles = [math.cos(vonmisesvariate(0,0)/2)  for x in range(self.PARTICLECOUNT)]
         for _ in range(self.PARTICLECOUNT):
             currPose = Pose()
             currPose.position.x = initialPositions_x[_]
@@ -92,5 +88,13 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.Pose) robot's estimated pose.
          """
-        pass
+        #A variety of methods can be adopted here we are implementing positional clustering
+        #defining a pose object
+        estimatedPose = Pose()
+
+        #calculating distance to origin for all particles in the particle cloud
+        distances =[self.distanceToParticle(particle) for particle in self.particlecloud]
+
+        
+
     
