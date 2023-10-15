@@ -1,7 +1,8 @@
 #import matplotlib.pyplot as plt
+from geometry_msgs.msg import Pose, PoseArray
 from collections import Counter
-def euclidean_distance(point1, point2):
-    return ((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2) ** 0.5
+def euclidean_distance(point1:Pose, point2:Pose):
+    return ((point1.position.x - point2.position.x) ** 2 + (point1.position.y - point2.position.y) ** 2) ** 0.5
 
 def region_query(data, point, epsilon):
     neighbors = []
@@ -26,7 +27,7 @@ def expand_cluster(data, labels, point_index, cluster_id, epsilon, min_samples):
                         seeds.append(neighbor_index)
                     labels[neighbor_index] = cluster_id
 
-def dbscan(data, epsilon, min_samples):
+def dbscan(data: PoseArray , epsilon, min_samples):
     n = len(data)
     labels = [0] * n  # 0 represents unclassified, -1 represents noise, and positive integers represent clusters
     cluster_id = 0
@@ -44,7 +45,7 @@ def dbscan(data, epsilon, min_samples):
 
     return labels
 
-def priminent_cluster(epsilon,min_samples,data):
+def prominent_cluster(epsilon,min_samples,data: PoseArray):
 
     #cluster data
     cluster_labels = dbscan(data, epsilon, min_samples)

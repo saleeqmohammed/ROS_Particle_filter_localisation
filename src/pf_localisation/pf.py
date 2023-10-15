@@ -7,6 +7,7 @@ from random import random, vonmisesvariate,gauss,randrange
 import numpy as np  
 from time import time
 from statistics import mean,stdev
+from . import dbscan
 class PFLocaliser(PFLocaliserBase):
        
     def __init__(self):
@@ -88,9 +89,30 @@ class PFLocaliser(PFLocaliserBase):
         #A variety of methods can be adopted here we are implementing positional clustering
         #defining a pose object
         estimatedPose = Pose()
+        #maximum distance between particles in cluster
+        epsilon =3
+        #mininum number of particles in a cluster 
+        min_particles =2
+        #perform a density based spatial clustering based on position
+        prominent_cluster =dbscan.prominent_cluster(epsilon,min_particles,self.particlecloud.poses)
+        cluster_x =0
+        cluster_y =0
+        cluster_w =0
+        n_cluster =0
+        for point in prominent_cluster:
+            cluster_x = cluster_x + point.position.x
+            cluster_y = cluster_y + point.position.y
+            cluster_w = cluster_w + point.orientation.w
+            n_cluster = n_cluster+1
+        cluster_x = cluster_x/n_cluster
+        cluster_y = cluster_y/n_cluster
+        cluster_w = cluster_w/n_cluster
+        estimatedPose.position.x = cluster_x
+        estimatedPose.position.y = cluster_y
+        estimatedPose.orientation.w = cluster_w
+        return estimatedPose
 
-        #calculating distance to origin for all particles in the particle cloud
-        distances =[self.distanceToParticle(particle) for particle in self.particlecloud]
+        
 
         
 
