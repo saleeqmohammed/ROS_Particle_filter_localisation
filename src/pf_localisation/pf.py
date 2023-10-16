@@ -68,7 +68,15 @@ class PFLocaliser(PFLocaliserBase):
             | scan (sensor_msgs.msg.LaserScan): laser scan to use for update
 
          """
-        pass
+        #get weights for each particle using sel.sensor_model.get_weigth(scan,particle)
+        #sort for highest weight/probability
+        #for AMCL, calculate entropy / varience for entropy:
+        #normalize weights (sum to 1)
+        #calculate h(x)=-sum(p(x)*log(p(x)))
+        #dope the points here for edge cases
+        #resampling with cumulative weight etc lecture 6
+        #draw  desired number of points accorrding to systematic resampling technique
+        #return particle cloud
     def estimate_pose(self):
         #Prediction
         """
