@@ -3,7 +3,7 @@ from pf_localisation.pf_base import PFLocaliserBase
 import math
 import rospy
 from . util import rotateQuaternion, getHeading
-from random import random, vonmisesvariate,gauss,randrange
+from random import  vonmisesvariate,gauss,uniform
 import numpy as np  
 from time import time
 from statistics import mean,stdev
@@ -14,10 +14,14 @@ class PFLocaliser(PFLocaliserBase):
         # ----- Call the superclass constructor
         super(PFLocaliser, self).__init__()
         # ----- Set motion model parameters
- 
+        self.ODOM_TRANSLATION_NOISE =0.015
+        self.ODOM_DRIFT_NOISE=0.030
+        self.ODOM_ROTATION_NOISE=0.022
         # ----- Sensor model parameters
-        self.PARTICLECOUNT =100
+        self.PARTICLECOUNT =500
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
+        self.ENTROPY_LIMIT =12
+        self.PARIICLE_RETENTION = 0.9
         #self.particlecloud = self.initialise_particle_cloud(0)
         #--visualisation parameters setting these manually atm since /map_metadata is not subscribed yet
         self.MAP_RESOULUTION = 0.050
@@ -68,15 +72,72 @@ class PFLocaliser(PFLocaliserBase):
             | scan (sensor_msgs.msg.LaserScan): laser scan to use for update
 
          """
-        #get weights for each particle using sel.sensor_model.get_weigth(scan,particle)
-        #sort for highest weight/probability
-        #for AMCL, calculate entropy / varience for entropy:
-        #normalize weights (sum to 1)
-        #calculate h(x)=-sum(p(x)*log(p(x)))
+        #get weights for each particle using self.sensor_model.get_weigth(scan,particle)
+        particles =self.particlecloud.poses
+        
+        #add random particles
+        N_random_particles = int(self.PARTICLECOUNT*(1-self.PARIICLE_RETENTION))
+        particles_per_gaussian = int(N_random_particles/7)+1
+        doping_origins=[(-11,5),(-3,12),(-5,7),(0,0),(11,-5),(3,-12),(5,-7)]
+        for origin in doping_origins:
+            for _ in range(particles_per_gaussian):
+                randPose= Pose()
+                doping_x =gauss(origin[0],3)
+                doping_y =gauss(origin[1],3)
+            #create random uniform probability angles
+                doping_angle = math.cos(vonmisesvariate(0,0)/2)
+                randPose.position.x = doping_x
+                randPose.position.y = doping_y
+                randPose.orientation.w = doping_angle
+                self.particlecloud.poses.append(randPose)
+
+
         #dope the points here for edge cases
+
+        probabilistic_weights=[self.sensor_model.get_weight(scan,particle) for particle in particles]
+        #normalize weights (sum to 1)
+        probabilistic_weights =probabilistic_weights/sum(probabilistic_weights)
+        weighted_particles =[(particle,weight) for particle,weight in zip(particles,probabilistic_weights)]
+        #sort for highest weight/probability
+        sorted_particles = sorted(weighted_particles,key= lambda particle_with_weight: particle_with_weight[1],reverse=1)
+        #for AMCL, calculate entropy / varience for entropy:
+        #calculate h(x)=-sum(p(x)*log(p(x)))
+        total_entropy =-sum(np.dot(probabilistic_weights,np.log(probabilistic_weights)))
+        rospy.loginfo("Entropy: %d"%(total_entropy))
+        #FIrst sampling
+        N_sample_space =0
+        sample_space=[]
+        while N_sample_space <= self.PARTICLECOUNT:
+            particle_with_weight =sorted_particles.pop()
+            sample_space.append(particle_with_weight)
+            N_sample_space = N_sample_space + 1
+
         #resampling with cumulative weight etc lecture 6
+        resampled_space=PoseArray()
+        particle_cumulative_weight=[]
+        cumulative_weight = 0
+        for sample in sample_space:
+            cumulative_weight = cumulative_weight+sample[1]
+            particle_cumulative_weight.append((sample[0],cumulative_weight))
+        
+        #generate a random thresholds
         #draw  desired number of points accorrding to systematic resampling technique
+        M=self.PARTICLECOUNT
+        u = uniform(0.0,1/M)
+        for cumulative_particle in particle_cumulative_weight:
+            i=0
+            while u>cumulative_particle[1]:
+                i = i+1
+            #construct the particle
+            newParticle = Pose()
+            sample = particle_cumulative_weight[i]
+            newParticle.position.x = sample.position.x + gauss(0,self.ODOM_TRANSLATION_NOISE)
+            newParticle.position.y = sample.position.y + gauss(0, self.ODOM_DRIFT_NOISE)
+            newParticle.orientation = sample.orientation.w + vonmisesvariate(0,self.ODOM_ROTATION_NOISE)
+            resampled_space.poses.append(newParticle)
+            u =u + 1/M
         #return particle cloud
+        self.particlecloud = resampled_space
     def estimate_pose(self):
         #Prediction
         """
