@@ -59,3 +59,38 @@ def prominent_cluster(epsilon,min_samples,data: PoseArray):
     most_prominent_cluster_data = [data[i] for i, label in enumerate(cluster_labels) if label == most_prominent_cluster_label]
     return most_prominent_cluster_data
 
+def dbscanEstimate(particlecloud:PoseArray):
+
+    estimatedPose = Pose()
+    #maximum distance between particles in cluster
+    epsilon =3
+    #mininum number of particles in a cluster 
+    min_particles =2
+    #perform a density based spatial clustering based on position
+    main_cluster =prominent_cluster(epsilon,min_particles,particlecloud)
+    cluster_x =0
+    cluster_y =0
+    cluster_w =0
+    cluster_ori_z =0
+    n_cluster =0
+    for point in main_cluster:
+        cluster_x = cluster_x + point.position.x
+        cluster_y = cluster_y + point.position.y
+        cluster_w = cluster_w + point.orientation.w
+        cluster_ori_z = cluster_ori_z + point.orientation.z
+        n_cluster = n_cluster+1
+    cluster_x = cluster_x/n_cluster
+    cluster_y = cluster_y/n_cluster
+    cluster_w = cluster_w/n_cluster
+    cluster_ori_z = cluster_ori_z/n_cluster
+    estimatedPose.position.x = cluster_x
+    estimatedPose.position.y = cluster_y
+    estimatedPose.orientation.w = cluster_w
+    estimatedPose.orientation.z = cluster_ori_z
+    return estimatedPose
+
+        
+
+        
+
+

@@ -1,13 +1,14 @@
 from geometry_msgs.msg import Pose, PoseArray, Quaternion
-from pf_localisation.pf_base import PFLocaliserBase
+from . pf_base import PFLocaliserBase
 import math
 import rospy
-from . util import rotateQuaternion, getHeading
-from random import  vonmisesvariate,gauss,uniform
-import numpy as np  
-from time import time
-from statistics import mean,stdev
 from . import dbscan
+from . util import rotateQuaternion, getHeading
+from random import gauss, randint, uniform, vonmisesvariate
+from . import distance_clustering
+from time import time
+
+
 class PFLocaliser(PFLocaliserBase):
        
     def __init__(self):
@@ -18,10 +19,10 @@ class PFLocaliser(PFLocaliserBase):
         self.ODOM_DRIFT_NOISE=0.030
         self.ODOM_ROTATION_NOISE=0.022
         # ----- Sensor model parameters
-        self.PARTICLECOUNT =500
+        self.PARTICLECOUNT =200
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
         self.ENTROPY_LIMIT =12
-        self.PARIICLE_RETENTION = 0.9
+        self.PARTICLE_RETENTION = 0.95
         #self.particlecloud = self.initialise_particle_cloud(0)
         #--visualisation parameters setting these manually atm since /map_metadata is not subscribed yet
         self.MAP_RESOULUTION = 0.050
@@ -56,11 +57,7 @@ class PFLocaliser(PFLocaliserBase):
             startingPoses.poses.append(currPose)
             
         return startingPoses
-
- 
-    
     def update_particle_cloud(self, scan):
-        #correction
         """
         This should use the supplied laser scan to update the current
         particle cloud. i.e. self.particlecloud should be updated.
@@ -69,31 +66,32 @@ class PFLocaliser(PFLocaliserBase):
             | scan (sensor_msgs.msg.LaserScan): laser scan to use for update
 
          """
-        #get weights for each particle using self.sensor_model.get_weigth(scan,particle)
-        particles =self.particlecloud.poses
 
-        probabilistic_weights=[self.sensor_model.get_weight(scan,particle) for particle in particles]
-        #normalize weights (sum to 1)
-        #probabilistic_weights =[probability/sum(probabilistic_weights) for probability in probabilistic_weights]
-        weighted_particles =[(particle,weight) for particle,weight in zip(particles,probabilistic_weights)]
-        #sort for highest weight/probability
-        sorted_particles = sorted(weighted_particles,key= lambda particle_with_weight: particle_with_weight[1],reverse=True)
-        heaviestParticles =sorted_particles[0:int(self.PARIICLE_RETENTION*self.PARTICLECOUNT)]
-        #for AMCL, calculate entropy / varience for entropy:
-        #calculate h(x)=-sum(p(x)*log(p(x)))
-        total_entropy =-np.dot(probabilistic_weights,np.log(probabilistic_weights))
-        rospy.loginfo("Entropy: %d"%(total_entropy))
+        "Initialize Variables"
+        cloudPoints = self.PARTICLECOUNT  # Is the # of cloud points we have
+        weights = [] # Array for storing the weights of each particle
+        
+
+        "Scan the weights of each particle"
+        for eachParticle in self.particlecloud.poses:
+            myPose = Pose() # A pose for each of the particles in the particle cloud
+            myPose = eachParticle #assigns that particle to the pose
+            weights.append((eachParticle, self.sensor_model.get_weight(scan, eachParticle))) # Creates a tuple with the particle position and weights
+        
+        sortedWeights = sorted(weights, key=lambda higherWeights: higherWeights[1], reverse=True) # Puts higher weight particles at top of array to guarantee copies
+        heaviestParticles = sortedWeights[0:int(self.PARTICLECOUNT * self.PARTICLE_RETENTION)] #Takes the % heaviest particles in a new array
+
+        weightSum = sum(higherWeights[1] for higherWeights in heaviestParticles) #Does the sum of weights for top particles
+
+
+        " Particles to add via new random position generation "
+        remainingWeightPoses = PoseArray() #The Array we are going to return for the cloud
+        width = self.occupancy_map.info.width #The width of the map, so particles only span inside of the width
+        height = self.occupancy_map.info.height #The height of the map so particle only span inside the heigh of the map
+        resolution = self.occupancy_map.info.resolution #gives the resolution of the map
+        remainingCloudPoints = cloudPoints * (1-self.PARTICLE_RETENTION) # Is the number of cloud points we are now randomly determining
+        appendedParticles = 0 # To check that the remaining cloudpoints have been added
         '''
-        #FIrst sampling
-        N_sample_space =0
-        sample_space=[]
-        while N_sample_space <= self.PARTICLECOUNT:
-            particle_with_weight =sorted_particles.pop()
-            sample_space.append(particle_with_weight)
-            N_sample_space = N_sample_space + 1
-            #ospy.loginfo("stuck here!")
-        '''
-        #add random particles
         doped_particles=[]
         N_random_particles = self.PARTICLECOUNT -len(heaviestParticles)
         particles_per_gaussian = int(N_random_particles/7)+1
@@ -107,45 +105,62 @@ class PFLocaliser(PFLocaliserBase):
                 doping_angle = math.cos(vonmisesvariate(0,0)/2)
                 randPose.position.x = doping_x
                 randPose.position.y = doping_y
-                randPose.orientation.w = doping_angle
+                randPose.orientation= rotateQuaternion(Quaternion(w=1),doping_angle)
                 doped_particles.append(randPose)
         remainingparticles = self.PARTICLECOUNT-len(heaviestParticles)
         addedParticles =0
         dopping_stash=PoseArray()
-        while addedParticles < remainingparticles:
-            dopping_stash.poses.append(doped_particles[addedParticles])
-            addedParticles = addedParticles+1
+        '''
+        while appendedParticles < remainingCloudPoints:
+            myPose = Pose() #creates a pose variable, once per cycle to not cause problem when appending
+            random_angle = vonmisesvariate(0,0) # generates a random angle between 0 to 2pi
+            random_x = randint(0,width-1)# generates a random position around center of map 
+            random_y = randint(0,height-1) # generates a random position around center of map
+            myPose.position.x = random_x * resolution #Multiplies by the resolution of the map so the correct x position is obtained
+            myPose.position.y = random_y * resolution #Multiplies by the resolution of the map so the correct y position is obtained
+            myPose.orientation = rotateQuaternion(Quaternion(w=1.0),random_angle) #rotates from default quaternion into new angle
 
-        total_weight = sum(probabilistic_weights)
-        #resampling with cumulative weight etc lecture 6
-        resampled_space=PoseArray()
-        particle_cumulative_weight=[]
-        cumulative_weight = heaviestParticles[0][1]
-        for (particle,weight) in heaviestParticles:
-            particle_cumulative_weight.append((particle,cumulative_weight+ (weight/total_weight)))
-            cumulative_weight = cumulative_weight+(weight/total_weight)
+            if self.occupancy_map.data[random_x + random_y * width] == 0: # Verifies that the particle is created in a white space
+                remainingWeightPoses.poses.append(myPose) #Adds the particle to an array.
+                appendedParticles += 1 #Ready to append the next particle
+            
+
+
+
+        """ Resampling of topWeight Particles"""
+        # ------ Cumulative Distribution initialization
+        cumulativeDistributionF = [] #Initializes the cumulative distribution array
+        accumulatedWeight = 0 #The initial weight of the particle
+
+        for (particle, weight) in heaviestParticles: #Heaviest particle array has particle data, and weight data, this was already sorted before, created this to make new array
+            cumulativeDistributionF.append((particle, accumulatedWeight + weight/weightSum)) # Appends the particle info, and the accumulated weight to create cumulative weight distribution. 
+            accumulatedWeight = accumulatedWeight + weight/weightSum #Accumulate weights 
         
-        #print(particle_cumulative_weight[0])
-        #generate a random thresholds
-        #draw  desired number of points accorrding to systematic resampling technique
-        M=len(heaviestParticles)
-        threshold =uniform(0,(1/M))
-        i=0
-        for points in range(0,M):
-            while threshold>particle_cumulative_weight[i][1]:
-                rospy.loginfo("u:%f c%f lhp%d threshold%f" %(threshold,particle_cumulative_weight[i][1],len(heaviestParticles),threshold))
-                i = i+1
-                
-            #construct the particle
-            newParticle = Pose()
-            sample = particle_cumulative_weight[i][0]
-            newParticle.position.x = sample.position.x + gauss(0,self.ODOM_TRANSLATION_NOISE)
-            newParticle.position.y = sample.position.y + gauss(0, self.ODOM_DRIFT_NOISE)
-            newParticle.orientation = sample.orientation.w + vonmisesvariate(0,self.ODOM_ROTATION_NOISE)
-            resampled_space.poses.append(newParticle)
-            threshold =threshold + math.pow(M,-1)
-        #return particle cloud
-        self.particlecloud.poses = resampled_space.poses + dopping_stash.poses
+        threshold = uniform(0,math.pow(len(heaviestParticles),-1)) #Creates uniform distribution for the threshold to update particles
+        cycleNum = 0 # variable for while
+        arrayPoses = PoseArray() #creates an array of poses to store poses
+
+        for points in range(0, len(heaviestParticles)): #starts updating threshold and storing positions  of heaviest particles
+            while threshold > cumulativeDistributionF[cycleNum][1]:
+                cycleNum += 1 
+            
+            myPose = Pose() #stores the new pose
+            myPose.position.x = cumulativeDistributionF[cycleNum][0].position.x + gauss(0,self.ODOM_TRANSLATION_NOISE ) #stores position x
+            myPose.position.y = cumulativeDistributionF[cycleNum][0].position.y + gauss(0,self.ODOM_DRIFT_NOISE ) #stores position y
+            myPose.orientation = rotateQuaternion(Quaternion(w=1.0), getHeading(cumulativeDistributionF[cycleNum][0].orientation) + 
+                            gauss(0, self.ODOM_ROTATION_NOISE)) #stores orientation
+
+            arrayPoses.poses.append(myPose) #appends the pose
+            threshold = threshold + math.pow(len(heaviestParticles),-1) #continues updating the threshold
+
+
+        modifiedPosesArray = arrayPoses #stores the array in the modified array
+        modifiedPosesArray.poses = modifiedPosesArray.poses + remainingWeightPoses.poses #combines both array poses
+
+
+        self.particlecloud = modifiedPosesArray #updates particle cloud
+
+
     def estimate_pose(self):
         #Prediction
         """
@@ -163,35 +178,9 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.Pose) robot's estimated pose.
          """
-        rospy.loginfo("estimate function called!")
         #A variety of methods can be adopted here we are implementing positional clustering
-        #defining a pose object
-        estimatedPose = Pose()
-        #maximum distance between particles in cluster
-        epsilon =3
-        #mininum number of particles in a cluster 
-        min_particles =2
-        #perform a density based spatial clustering based on position
-        prominent_cluster =dbscan.prominent_cluster(epsilon,min_particles,self.particlecloud.poses)
-        cluster_x =0
-        cluster_y =0
-        cluster_w =0
-        cluster_ori_z =0
-        n_cluster =0
-        for point in prominent_cluster:
-            cluster_x = cluster_x + point.position.x
-            cluster_y = cluster_y + point.position.y
-            cluster_w = cluster_w + point.orientation.w
-            cluster_ori_z = cluster_ori_z + point.orientation.z
-            n_cluster = n_cluster+1
-        cluster_x = cluster_x/n_cluster
-        cluster_y = cluster_y/n_cluster
-        cluster_w = cluster_w/n_cluster
-        cluster_ori_z = cluster_ori_z/n_cluster
-        estimatedPose.position.x = cluster_x
-        estimatedPose.position.y = cluster_y
-        estimatedPose.orientation.w = cluster_w
-        estimatedPose.orientation.z = cluster_ori_z
+        estimatedPose =dbscan.dbscanEstimate(self.particlecloud.poses)
+        #estimatedPose = distance_clustering.particle_clustering(self.particlecloud.poses)
         return estimatedPose
 
         
