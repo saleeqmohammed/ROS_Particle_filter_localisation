@@ -7,7 +7,7 @@ from . util import rotateQuaternion, getHeading
 from random import gauss, randint, uniform, vonmisesvariate
 from . import distance_clustering
 from time import time
-
+import numpy as np
 
 class PFLocaliser(PFLocaliserBase):
        
@@ -91,38 +91,25 @@ class PFLocaliser(PFLocaliserBase):
         resolution = self.occupancy_map.info.resolution #gives the resolution of the map
         remainingCloudPoints = cloudPoints * (1-self.PARTICLE_RETENTION) # Is the number of cloud points we are now randomly determining
         appendedParticles = 0 # To check that the remaining cloudpoints have been added
-        '''
-        doped_particles=[]
-        N_random_particles = self.PARTICLECOUNT -len(heaviestParticles)
-        particles_per_gaussian = int(N_random_particles/7)+1
-        doping_origins=[(-11,5),(-3,12),(-5,7),(0,0),(11,-5),(3,-12),(5,-7)]
-        for origin in doping_origins:
-            for _ in range(particles_per_gaussian):
-                randPose= Pose()
-                doping_x =gauss(origin[0],3)
-                doping_y =gauss(origin[1],3)
-            #create random uniform probability angles
-                doping_angle = math.cos(vonmisesvariate(0,0)/2)
-                randPose.position.x = doping_x
-                randPose.position.y = doping_y
-                randPose.orientation= rotateQuaternion(Quaternion(w=1),doping_angle)
-                doped_particles.append(randPose)
-        remainingparticles = self.PARTICLECOUNT-len(heaviestParticles)
-        addedParticles =0
-        dopping_stash=PoseArray()
-        '''
-        while appendedParticles < remainingCloudPoints:
-            myPose = Pose() #creates a pose variable, once per cycle to not cause problem when appending
-            random_angle = vonmisesvariate(0,0) # generates a random angle between 0 to 2pi
-            random_x = randint(0,width-1)# generates a random position around center of map 
-            random_y = randint(0,height-1) # generates a random position around center of map
-            myPose.position.x = random_x * resolution #Multiplies by the resolution of the map so the correct x position is obtained
-            myPose.position.y = random_y * resolution #Multiplies by the resolution of the map so the correct y position is obtained
-            myPose.orientation = rotateQuaternion(Quaternion(w=1.0),random_angle) #rotates from default quaternion into new angle
 
-            if self.occupancy_map.data[random_x + random_y * width] == 0: # Verifies that the particle is created in a white space
-                remainingWeightPoses.poses.append(myPose) #Adds the particle to an array.
-                appendedParticles += 1 #Ready to append the next particle
+        originIdx =0
+        while appendedParticles < remainingCloudPoints:
+            break
+            randPose = Pose()
+            doping_origins=[(19.1, 35.1), (27.1, 42.1), (25.1, 37.1), (30.1, 30.1), (41.1, 25.1), (33.1, 18.1), (35.1, 23.1)]
+            #[4.050000000000001, 12.05, 10.05, 15.05, 26.05, 18.05, 20.05]
+            #[20.05, 27.05, 22.05, 15.05, 10.05, 3.0500000000000007, 8.05]
+            #doping_origins=[(-11,5),(-3,12),(-5,7),(0,0),(11,-5),(3,-12),(5,-7)]
+            if originIdx <6:
+                originIdx +=1
+            else:
+                originIdx=0
+            origin = doping_origins[originIdx]
+            randPose.position.x =gauss(origin[0],3)
+            randPose.position.y =gauss(origin[1],3)
+            randPose.orientation =rotateQuaternion(Quaternion(w=1),vonmisesvariate(0,0))
+            #remainingWeightPoses.poses.append(randPose)
+            appendedParticles += 1 #Ready to append the next particle
             
 
 
@@ -139,7 +126,9 @@ class PFLocaliser(PFLocaliserBase):
         threshold = uniform(0,math.pow(len(heaviestParticles),-1)) #Creates uniform distribution for the threshold to update particles
         cycleNum = 0 # variable for while
         arrayPoses = PoseArray() #creates an array of poses to store poses
-
+        normalizedWeights =[particle[1]/weightSum for particle in heaviestParticles]
+        entropy = -np.dot(normalizedWeights,np.log(normalizedWeights))
+        rospy.loginfo("entrpy:{}".format(entropy))
         for points in range(0, len(heaviestParticles)): #starts updating threshold and storing positions  of heaviest particles
             while threshold > cumulativeDistributionF[cycleNum][1]:
                 cycleNum += 1 
