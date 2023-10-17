@@ -7,8 +7,8 @@ from . util import rotateQuaternion, getHeading
 from random import gauss, randint, uniform, vonmisesvariate
 from . import distance_clustering
 from time import time
-
-
+import numpy as np
+from statistics import variance
 class PFLocaliser(PFLocaliserBase):
        
     def __init__(self):
@@ -19,15 +19,15 @@ class PFLocaliser(PFLocaliserBase):
         self.ODOM_DRIFT_NOISE=0.030
         self.ODOM_ROTATION_NOISE=0.022
         # ----- Sensor model parameters
-        self.PARTICLECOUNT =200
-        self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
+        self.PARTICLECOUNT =100
+        self.DOPING_POINT_COUNT = 20     # Number of readings to predict
         self.ENTROPY_LIMIT =12
-        self.PARTICLE_RETENTION = 0.95
+        self.PARTICLE_RETENTION = 1.00
         #self.particlecloud = self.initialise_particle_cloud(0)
         #--visualisation parameters setting these manually atm since /map_metadata is not subscribed yet
         self.MAP_RESOULUTION = 0.050
-        self.MAP_HEIGHT =602*0.050
-        self.MAP_WIDTH =602*0.050
+        self.MAP_HEIGHT =602*self.MAP_RESOULUTION
+        self.MAP_WIDTH =602*self.MAP_RESOULUTION
 
     def initialise_particle_cloud(self, initialpose:Pose):
         """
@@ -68,7 +68,6 @@ class PFLocaliser(PFLocaliserBase):
          """
 
         "Initialize Variables"
-        cloudPoints = self.PARTICLECOUNT  # Is the # of cloud points we have
         weights = [] # Array for storing the weights of each particle
         
 
@@ -89,29 +88,10 @@ class PFLocaliser(PFLocaliserBase):
         width = self.occupancy_map.info.width #The width of the map, so particles only span inside of the width
         height = self.occupancy_map.info.height #The height of the map so particle only span inside the heigh of the map
         resolution = self.occupancy_map.info.resolution #gives the resolution of the map
-        remainingCloudPoints = cloudPoints * (1-self.PARTICLE_RETENTION) # Is the number of cloud points we are now randomly determining
+        dopingPoints =self.DOPING_POINT_COUNT# cloudPoints * (1-self.PARTICLE_RETENTION) # Is the number of cloud points we are now randomly determining
         appendedParticles = 0 # To check that the remaining cloudpoints have been added
-        '''
-        doped_particles=[]
-        N_random_particles = self.PARTICLECOUNT -len(heaviestParticles)
-        particles_per_gaussian = int(N_random_particles/7)+1
-        doping_origins=[(-11,5),(-3,12),(-5,7),(0,0),(11,-5),(3,-12),(5,-7)]
-        for origin in doping_origins:
-            for _ in range(particles_per_gaussian):
-                randPose= Pose()
-                doping_x =gauss(origin[0],3)
-                doping_y =gauss(origin[1],3)
-            #create random uniform probability angles
-                doping_angle = math.cos(vonmisesvariate(0,0)/2)
-                randPose.position.x = doping_x
-                randPose.position.y = doping_y
-                randPose.orientation= rotateQuaternion(Quaternion(w=1),doping_angle)
-                doped_particles.append(randPose)
-        remainingparticles = self.PARTICLECOUNT-len(heaviestParticles)
-        addedParticles =0
-        dopping_stash=PoseArray()
-        '''
-        while appendedParticles < remainingCloudPoints:
+
+        while appendedParticles < dopingPoints:
             myPose = Pose() #creates a pose variable, once per cycle to not cause problem when appending
             random_angle = vonmisesvariate(0,0) # generates a random angle between 0 to 2pi
             random_x = randint(0,width-1)# generates a random position around center of map 
@@ -139,7 +119,26 @@ class PFLocaliser(PFLocaliserBase):
         threshold = uniform(0,math.pow(len(heaviestParticles),-1)) #Creates uniform distribution for the threshold to update particles
         cycleNum = 0 # variable for while
         arrayPoses = PoseArray() #creates an array of poses to store poses
-
+        induvidual_probabilities =[point[1] for point in weights]
+        probabilitySum = sum(induvidual_probabilities)
+        probabilities =[p/probabilitySum for p in induvidual_probabilities]
+        #entropy = -np.dot(probabilities,np.log(probabilities))/np.log(len(probabilities))
+        cloud_varience =variance(probabilities)
+        N_particles =5.5*cloud_varience*10**8
+        if N_particles < 100:
+            N_particles = 100
+        elif N_particles > 800:
+            N_particles =800
+        self.PARTICLECOUNT = N_particles
+        N_dops =-0.278*cloud_varience+19.83
+        if N_dops <10:
+            N_dops=10
+        elif N_dops > 20:
+            N_dops=20
+        self.DOPING_POINT_COUNT =N_dops
+        #self.PARTICLECOUNT = f(variance)
+        #self.DOPING_POINT_COUNT =g(variance)
+        rospy.loginfo("Variance :{}".format(cloud_varience))
         for points in range(0, len(heaviestParticles)): #starts updating threshold and storing positions  of heaviest particles
             while threshold > cumulativeDistributionF[cycleNum][1]:
                 cycleNum += 1 

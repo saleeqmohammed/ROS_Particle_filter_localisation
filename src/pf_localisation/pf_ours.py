@@ -2,7 +2,7 @@ from geometry_msgs.msg import Pose, PoseArray, Quaternion
 from pf_localisation.pf_base import PFLocaliserBase
 import math
 import rospy
-from . util import rotateQuaternion, getHeading
+from .util import rotateQuaternion, getHeading
 from random import  vonmisesvariate,gauss,uniform
 import numpy as np  
 from time import time
@@ -21,7 +21,7 @@ class PFLocaliser(PFLocaliserBase):
         self.PARTICLECOUNT =200
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
         self.ENTROPY_LIMIT =12
-        self.PARIICLE_RETENTION = 0.95
+        self.PARIICLE_RETENTION = 0.99
         #self.particlecloud = self.initialise_particle_cloud(0)
         #--visualisation parameters setting these manually atm since /map_metadata is not subscribed yet
         self.MAP_RESOULUTION = 0.050
