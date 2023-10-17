@@ -1,50 +1,5 @@
-[INFO] [1697208684.032954, 0.000000]: Sensor model scan parameters set.
-Unique marker
-0
-Unique marker
-[INFO] [1697208684.062630, 0.000000]: Waiting for a map...
-[INFO] [1697208684.104335, 0.000000]: Map received. 602 X 602, 0.050000 px/m.
-[INFO] [1697208684.105846, 10316.300000]: Sensor model map set.
-[INFO] [1697208684.107108, 10316.300000]: Particle filter got map. (Re)initialising.
-Unique marker
-header: 
-  seq: 0
-  stamp: 
-    secs: 0
-    nsecs:         0
-  frame_id: "map"
-pose: 
-  pose: 
-    position: 
-      x: 10
-      y: 5
-      z: 0
-    orientation: 
-      x: 0.0
-      y: 0.0
-      z: 0.0
-      w: 1.0
-  covariance: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-Unique marker
-[INFO] [1697208690.130124, 10322.300000]: Got pose. Calling initialise_particle_cloud().
-Unique marker
-header: 
-  seq: 0
-  stamp: 
-    secs: 0
-    nsecs:         0
-  frame_id: "map"
-pose: 
-  pose: 
-    position: 
-      x: 15.13502311706543
-      y: 15.687509536743164
-      z: 0.0
-    orientation: 
-      x: 0.0
-      y: 0.0
-      z: -0.1682080928797725
-      w: 0.9857515089969429
-  covariance: [0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.06853892326654787]
-Unique marker
-[INFO] [1697208690.209347, 10322.300000]: Sensor model scan parameters set.
+[INFO] [1697474486.713137, 0.000000]: Waiting for a map...
+[INFO] [1697474486.742689, 0.000000]: Map received. 602 X 602, 0.050000 px/m.
+[INFO] [1697474486.746088, 0.000000]: Sensor model scan parameters set.
+[INFO] [1697474486.762635, 0.000000]: Sensor model map set.
+[INFO] [1697474486.766491, 0.000000]: Particle filter got map. (Re)initialising.

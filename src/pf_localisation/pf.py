@@ -47,15 +47,12 @@ class PFLocaliser(PFLocaliserBase):
         initialPositions_x =[gauss(initialpose.pose.pose.position.x,self.MAP_WIDTH/8) for _ in range(self.PARTICLECOUNT)]
         initialPositions_y =[gauss(initialpose.pose.pose.position.y,self.MAP_HEIGHT/8) for _ in range(self.PARTICLECOUNT)]
         #create random uniform probability angles
-        initialAngles = [math.cos(vonmisesvariate(0,0)/2)  for x in range(self.PARTICLECOUNT)]
+        initialAngles = [vonmisesvariate(0,0) for x in range(self.PARTICLECOUNT)]
         for _ in range(self.PARTICLECOUNT):
             currPose = Pose()
             currPose.position.x = initialPositions_x[_]
             currPose.position.y = initialPositions_y[_]
-            currPose.orientation.x=0
-            currPose.orientation.y=0
-            currPose.orientation.z=1
-            currPose.orientation.w=initialAngles[_]
+            currPose.orientation=rotateQuaternion(Quaternion(w=1.0),initialAngles[_])
             startingPoses.poses.append(currPose)
             
         return startingPoses
@@ -74,9 +71,31 @@ class PFLocaliser(PFLocaliserBase):
          """
         #get weights for each particle using self.sensor_model.get_weigth(scan,particle)
         particles =self.particlecloud.poses
-        
+
+        probabilistic_weights=[self.sensor_model.get_weight(scan,particle) for particle in particles]
+        #normalize weights (sum to 1)
+        #probabilistic_weights =[probability/sum(probabilistic_weights) for probability in probabilistic_weights]
+        weighted_particles =[(particle,weight) for particle,weight in zip(particles,probabilistic_weights)]
+        #sort for highest weight/probability
+        sorted_particles = sorted(weighted_particles,key= lambda particle_with_weight: particle_with_weight[1],reverse=True)
+        heaviestParticles =sorted_particles[0:int(self.PARIICLE_RETENTION*self.PARTICLECOUNT)]
+        #for AMCL, calculate entropy / varience for entropy:
+        #calculate h(x)=-sum(p(x)*log(p(x)))
+        total_entropy =-np.dot(probabilistic_weights,np.log(probabilistic_weights))
+        rospy.loginfo("Entropy: %d"%(total_entropy))
+        '''
+        #FIrst sampling
+        N_sample_space =0
+        sample_space=[]
+        while N_sample_space <= self.PARTICLECOUNT:
+            particle_with_weight =sorted_particles.pop()
+            sample_space.append(particle_with_weight)
+            N_sample_space = N_sample_space + 1
+            #ospy.loginfo("stuck here!")
+        '''
         #add random particles
-        N_random_particles = int(self.PARTICLECOUNT*(1-self.PARIICLE_RETENTION))
+        doped_particles=[]
+        N_random_particles = self.PARTICLECOUNT -len(heaviestParticles)
         particles_per_gaussian = int(N_random_particles/7)+1
         doping_origins=[(-11,5),(-3,12),(-5,7),(0,0),(11,-5),(3,-12),(5,-7)]
         for origin in doping_origins:
@@ -89,55 +108,44 @@ class PFLocaliser(PFLocaliserBase):
                 randPose.position.x = doping_x
                 randPose.position.y = doping_y
                 randPose.orientation.w = doping_angle
-                self.particlecloud.poses.append(randPose)
+                doped_particles.append(randPose)
+        remainingparticles = self.PARTICLECOUNT-len(heaviestParticles)
+        addedParticles =0
+        dopping_stash=PoseArray()
+        while addedParticles < remainingparticles:
+            dopping_stash.poses.append(doped_particles[addedParticles])
+            addedParticles = addedParticles+1
 
-
-        #dope the points here for edge cases
-
-        probabilistic_weights=[self.sensor_model.get_weight(scan,particle) for particle in particles]
-        #normalize weights (sum to 1)
-        probabilistic_weights =probabilistic_weights/sum(probabilistic_weights)
-        weighted_particles =[(particle,weight) for particle,weight in zip(particles,probabilistic_weights)]
-        #sort for highest weight/probability
-        sorted_particles = sorted(weighted_particles,key= lambda particle_with_weight: particle_with_weight[1],reverse=1)
-        #for AMCL, calculate entropy / varience for entropy:
-        #calculate h(x)=-sum(p(x)*log(p(x)))
-        total_entropy =-sum(np.dot(probabilistic_weights,np.log(probabilistic_weights)))
-        rospy.loginfo("Entropy: %d"%(total_entropy))
-        #FIrst sampling
-        N_sample_space =0
-        sample_space=[]
-        while N_sample_space <= self.PARTICLECOUNT:
-            particle_with_weight =sorted_particles.pop()
-            sample_space.append(particle_with_weight)
-            N_sample_space = N_sample_space + 1
-
+        total_weight = sum(probabilistic_weights)
         #resampling with cumulative weight etc lecture 6
         resampled_space=PoseArray()
         particle_cumulative_weight=[]
-        cumulative_weight = 0
-        for sample in sample_space:
-            cumulative_weight = cumulative_weight+sample[1]
-            particle_cumulative_weight.append((sample[0],cumulative_weight))
+        cumulative_weight = heaviestParticles[0][1]
+        for (particle,weight) in heaviestParticles:
+            particle_cumulative_weight.append((particle,cumulative_weight+ (weight/total_weight)))
+            cumulative_weight = cumulative_weight+(weight/total_weight)
         
+        #print(particle_cumulative_weight[0])
         #generate a random thresholds
         #draw  desired number of points accorrding to systematic resampling technique
-        M=self.PARTICLECOUNT
-        u = uniform(0.0,1/M)
-        for cumulative_particle in particle_cumulative_weight:
-            i=0
-            while u>cumulative_particle[1]:
+        M=len(heaviestParticles)
+        threshold =uniform(0,(1/M))
+        i=0
+        for points in range(0,M):
+            while threshold>particle_cumulative_weight[i][1]:
+                rospy.loginfo("u:%f c%f lhp%d threshold%f" %(threshold,particle_cumulative_weight[i][1],len(heaviestParticles),threshold))
                 i = i+1
+                
             #construct the particle
             newParticle = Pose()
-            sample = particle_cumulative_weight[i]
+            sample = particle_cumulative_weight[i][0]
             newParticle.position.x = sample.position.x + gauss(0,self.ODOM_TRANSLATION_NOISE)
             newParticle.position.y = sample.position.y + gauss(0, self.ODOM_DRIFT_NOISE)
             newParticle.orientation = sample.orientation.w + vonmisesvariate(0,self.ODOM_ROTATION_NOISE)
             resampled_space.poses.append(newParticle)
-            u =u + 1/M
+            threshold =threshold + math.pow(M,-1)
         #return particle cloud
-        self.particlecloud = resampled_space
+        self.particlecloud.poses = resampled_space.poses + dopping_stash.poses
     def estimate_pose(self):
         #Prediction
         """
@@ -155,6 +163,7 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.Pose) robot's estimated pose.
          """
+        rospy.loginfo("estimate function called!")
         #A variety of methods can be adopted here we are implementing positional clustering
         #defining a pose object
         estimatedPose = Pose()
@@ -167,18 +176,22 @@ class PFLocaliser(PFLocaliserBase):
         cluster_x =0
         cluster_y =0
         cluster_w =0
+        cluster_ori_z =0
         n_cluster =0
         for point in prominent_cluster:
             cluster_x = cluster_x + point.position.x
             cluster_y = cluster_y + point.position.y
             cluster_w = cluster_w + point.orientation.w
+            cluster_ori_z = cluster_ori_z + point.orientation.z
             n_cluster = n_cluster+1
         cluster_x = cluster_x/n_cluster
         cluster_y = cluster_y/n_cluster
         cluster_w = cluster_w/n_cluster
+        cluster_ori_z = cluster_ori_z/n_cluster
         estimatedPose.position.x = cluster_x
         estimatedPose.position.y = cluster_y
         estimatedPose.orientation.w = cluster_w
+        estimatedPose.orientation.z = cluster_ori_z
         return estimatedPose
 
         
