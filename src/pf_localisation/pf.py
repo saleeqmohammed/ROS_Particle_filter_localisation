@@ -124,13 +124,13 @@ class PFLocaliser(PFLocaliserBase):
         probabilities =[p/probabilitySum for p in induvidual_probabilities]
         #entropy = -np.dot(probabilities,np.log(probabilities))/np.log(len(probabilities))
         cloud_varience =variance(probabilities)
-        N_particles =5.5*cloud_varience*10**8
+        N_particles =5.5*(cloud_varience*10**8)+50
         if N_particles < 100:
             N_particles = 100
         elif N_particles > 800:
             N_particles =800
         self.PARTICLECOUNT = N_particles
-        N_dops =-0.278*cloud_varience+19.83
+        N_dops =-0.278*(cloud_varience*10**8)+19.83
         if N_dops <10:
             N_dops=10
         elif N_dops > 20:
