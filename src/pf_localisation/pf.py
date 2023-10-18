@@ -84,7 +84,7 @@ class PFLocaliser(PFLocaliserBase):
 
 
         " Particles to add via new random position generation "
-        remainingWeightPoses = PoseArray() #The Array we are going to return for the cloud
+        dopingPoses = PoseArray() #The Array we are going to return for the cloud
         width = self.occupancy_map.info.width #The width of the map, so particles only span inside of the width
         height = self.occupancy_map.info.height #The height of the map so particle only span inside the heigh of the map
         resolution = self.occupancy_map.info.resolution #gives the resolution of the map
@@ -101,7 +101,7 @@ class PFLocaliser(PFLocaliserBase):
             myPose.orientation = rotateQuaternion(Quaternion(w=1.0),random_angle) #rotates from default quaternion into new angle
 
             if self.occupancy_map.data[random_x + random_y * width] == 0: # Verifies that the particle is created in a white space
-                remainingWeightPoses.poses.append(myPose) #Adds the particle to an array.
+                dopingPoses.poses.append(myPose) #Adds the particle to an array.
                 appendedParticles += 1 #Ready to append the next particle
             
 
@@ -109,15 +109,15 @@ class PFLocaliser(PFLocaliserBase):
 
         """ Resampling of topWeight Particles"""
         # ------ Cumulative Distribution initialization
-        cumulativeDistributionF = [] #Initializes the cumulative distribution array
+        cumulativeDistribution = [] #Initializes the cumulative distribution array
         accumulatedWeight = 0 #The initial weight of the particle
 
         for (particle, weight) in heaviestParticles: #Heaviest particle array has particle data, and weight data, this was already sorted before, created this to make new array
-            cumulativeDistributionF.append((particle, accumulatedWeight + weight/weightSum)) # Appends the particle info, and the accumulated weight to create cumulative weight distribution. 
+            cumulativeDistribution.append((particle, accumulatedWeight + weight/weightSum)) # Appends the particle info, and the accumulated weight to create cumulative weight distribution. 
             accumulatedWeight = accumulatedWeight + weight/weightSum #Accumulate weights 
         
         threshold = uniform(0,math.pow(len(heaviestParticles),-1)) #Creates uniform distribution for the threshold to update particles
-        cycleNum = 0 # variable for while
+        skip = 0 # variable for while
         arrayPoses = PoseArray() #creates an array of poses to store poses
         induvidual_probabilities =[point[1] for point in weights]
         probabilitySum = sum(induvidual_probabilities)
@@ -140,13 +140,13 @@ class PFLocaliser(PFLocaliserBase):
         #self.DOPING_POINT_COUNT =g(variance)
         rospy.loginfo("Variance :{}".format(cloud_varience))
         for points in range(0, len(heaviestParticles)): #starts updating threshold and storing positions  of heaviest particles
-            while threshold > cumulativeDistributionF[cycleNum][1]:
-                cycleNum += 1 
+            while threshold > cumulativeDistribution[skip][1]:
+                skip += 1 
             
             myPose = Pose() #stores the new pose
-            myPose.position.x = cumulativeDistributionF[cycleNum][0].position.x + gauss(0,self.ODOM_TRANSLATION_NOISE ) #stores position x
-            myPose.position.y = cumulativeDistributionF[cycleNum][0].position.y + gauss(0,self.ODOM_DRIFT_NOISE ) #stores position y
-            myPose.orientation = rotateQuaternion(Quaternion(w=1.0), getHeading(cumulativeDistributionF[cycleNum][0].orientation) + 
+            myPose.position.x = cumulativeDistribution[skip][0].position.x + gauss(0,self.ODOM_TRANSLATION_NOISE ) #stores position x
+            myPose.position.y = cumulativeDistribution[skip][0].position.y + gauss(0,self.ODOM_DRIFT_NOISE ) #stores position y
+            myPose.orientation = rotateQuaternion(Quaternion(w=1.0), getHeading(cumulativeDistribution[skip][0].orientation) + 
                             gauss(0, self.ODOM_ROTATION_NOISE)) #stores orientation
 
             arrayPoses.poses.append(myPose) #appends the pose
@@ -154,7 +154,7 @@ class PFLocaliser(PFLocaliserBase):
 
 
         modifiedPosesArray = arrayPoses #stores the array in the modified array
-        modifiedPosesArray.poses = modifiedPosesArray.poses + remainingWeightPoses.poses #combines both array poses
+        modifiedPosesArray.poses = modifiedPosesArray.poses + dopingPoses.poses #combines both array poses
 
 
         self.particlecloud = modifiedPosesArray #updates particle cloud
